@@ -1,0 +1,26 @@
+# Manifestos Kubernetes do billing-service (Fase 4).
+# Em EKS o deploy é feito pelo Terraform em infra/ (mesmos recursos, com
+# valores reais de banco/fila/secret); estes YAMLs documentam a topologia e
+# são validados no CI (kubeconform). Para aplicar manualmente:
+#   kubectl apply -f k8s/
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: billing-config
+  namespace: billing
+data:
+  APP_NAME: "billing-service"
+  APP_ENV: "production"
+  DB_CONNECTION: "mysql"
+  DB_HOST: "<rds-billing-endpoint>"
+  DB_DATABASE: "billing"
+  DB_USERNAME: "billing"
+  MESSAGING_DRIVER: "sqs"
+  MESSAGING_QUEUE_PREFIX: "production"
+  AWS_DEFAULT_REGION: "us-east-1"
+  BILLING_PUBLIC_URL: "https://<api-gateway>"
+  PAYMENT_GATEWAY: "mercadopago"
+  NEWRELIC_APPNAME: "billing-service"
+  LOG_CHANNEL: "stack"
+  LOG_STACK: "stderr"

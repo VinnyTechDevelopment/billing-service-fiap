@@ -1,0 +1,274 @@
+openapi: 3.0.3
+info:
+  title: billing-service — Orçamento e Pagamento
+  version: 4.0.0
+  description: 'Orçamentos (aprovação/recusa pelo cliente) e pagamentos via **Mercado Pago** (Checkout Pro + webhook), com
+    estorno como compensação da saga.
+
+
+    Mensageria (SQS): consome `billing-commands` (`billing.CreateQuote`, `billing.CancelQuote`, `billing.RefundPayment`) e
+    publica em `os-saga-replies` via outbox transacional.'
+servers:
+- url: http://localhost:8084/api
+  description: Local
+- url: https://{gateway}/api
+  description: API Gateway
+  variables:
+    gateway:
+      default: xxxx.execute-api.us-east-1.amazonaws.com
+tags:
+- name: Orçamento (cliente)
+- name: Pagamento
+- name: Consulta (atendimento)
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtido via `POST /auth/login` ou `POST /auth/refresh`
+  schemas:
+    Quote:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        service_order_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - pending_approval
+          - approved
+          - rejected
+          - paid
+          - refunded
+          - cancelled
+        services:
+          type: array
+          items:
+            type: object
+        items:
+          type: array
+          items:
+            type: object
+        services_total:
+          type: number
+        items_total:
+          type: number
+        total:
+          type: number
+        decided_at:
+          type: string
+          nullable: true
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        quote_id:
+          type: string
+        amount:
+          type: number
+        provider:
+          type: string
+          enum:
+          - mercadopago
+          - fake
+        status:
+          type: string
+          enum:
+          - pending
+          - approved
+          - rejected
+          - refunded
+          - cancelled
+        checkout_url:
+          type: string
+        provider_payment_id:
+          type: string
+          nullable: true
+        paid_at:
+          type: string
+          nullable: true
+        failure_reason:
+          type: string
+          nullable: true
+    Erro:
+      type: object
+      properties:
+        message:
+          type: string
+paths:
+  /billing/quotes/{token}/approve:
+    get:
+      tags:
+      - Orçamento (cliente)
+      summary: Cliente aprova o orçamento (link do e-mail) — gera o checkout no Mercado Pago
+      parameters:
+      - &id001
+        name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 64
+          maxLength: 64
+        description: Token de aprovação enviado por e-mail ao cliente
+      responses:
+        '200':
+          description: Aprovado; retorna payment_url
+        '422': &id002
+          description: Token inválido/expirado ou orçamento já decidido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Erro'
+      security: []
+  /billing/quotes/{token}/reject:
+    get:
+      tags:
+      - Orçamento (cliente)
+      summary: Cliente recusa o orçamento — a OS será cancelada
+      parameters:
+      - *id001
+      responses:
+        '200':
+          description: Recusado
+        '422': *id002
+      security: []
+  /billing/quotes/{token}/decision:
+    post:
+      tags:
+      - Orçamento (cliente)
+      summary: Decisão via POST
+      parameters:
+      - *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - decision
+              properties:
+                decision:
+                  type: string
+                  enum:
+                  - approve
+                  - reject
+      responses:
+        '200':
+          description: OK
+        '422': *id002
+      security: []
+  /billing/webhooks/mercadopago:
+    post:
+      tags:
+      - Pagamento
+      summary: Notificação (webhook) do Mercado Pago — valida x-signature e reconsulta o pagamento na API do MP
+      parameters:
+      - name: x-signature
+        in: header
+        schema:
+          type: string
+        example: ts=1704908010,v1=618c85...
+      - name: x-request-id
+        in: header
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  example: payment
+                data:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+      responses:
+        '200':
+          description: Processado ou ignorado
+        '401':
+          description: Assinatura inválida
+      security: []
+  /billing/payments/{paymentId}/simulate:
+    post:
+      tags:
+      - Pagamento
+      summary: Simula aprovação/recusa (somente PAYMENT_GATEWAY=fake — demonstração)
+      parameters:
+      - &id004
+        name: paymentId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum:
+                  - approved
+                  - rejected
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: Gateway real configurado
+      security: []
+  /billing/service-orders/{serviceOrderId}:
+    get:
+      tags:
+      - Consulta (atendimento)
+      summary: Orçamento e último pagamento da OS
+      security: &id003
+      - bearerAuth: []
+      parameters:
+      - name: serviceOrderId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  quote:
+                    $ref: '#/components/schemas/Quote'
+                  payment:
+                    $ref: '#/components/schemas/Payment'
+        '422': *id002
+        '401':
+          description: Não autenticado
+  /billing/payments/{paymentId}:
+    get:
+      tags:
+      - Consulta (atendimento)
+      summary: Detalhe do pagamento
+      security: *id003
+      parameters:
+      - *id004
+      responses:
+        '200':
+          description: OK
+        '422': *id002
