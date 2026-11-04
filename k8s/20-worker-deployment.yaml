@@ -1,0 +1,58 @@
+# Manifestos Kubernetes do billing-service (Fase 4).
+# Em EKS o deploy é feito pelo Terraform em infra/ (mesmos recursos, com
+# valores reais de banco/fila/secret); estes YAMLs documentam a topologia e
+# são validados no CI (kubeconform). Para aplicar manualmente:
+#   kubectl apply -f k8s/
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-worker
+  namespace: billing
+  labels:
+    app: billing-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: billing-worker
+  template:
+    metadata:
+      labels:
+        app: billing-worker
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: consumer
+          image: ghcr.io/vinnytechdevelopment/billing-service-fiap:latest
+          imagePullPolicy: Always
+          # args (não command): preserva o ENTRYPOINT que injeta a License Key do New Relic
+          args: ["php", "artisan", "messaging:consume"]
+          env:
+            - name: NEWRELIC_APPNAME
+              value: "billing-service (worker)"
+          envFrom:
+            - configMapRef:
+                name: billing-config
+            - secretRef:
+                name: billing-secret
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 250m, memory: 256Mi }
+        - name: outbox
+          image: ghcr.io/vinnytechdevelopment/billing-service-fiap:latest
+          imagePullPolicy: Always
+          # args (não command): preserva o ENTRYPOINT que injeta a License Key do New Relic
+          args: ["php", "artisan", "outbox:relay"]
+          env:
+            - name: NEWRELIC_APPNAME
+              value: "billing-service (worker)"
+          envFrom:
+            - configMapRef:
+                name: billing-config
+            - secretRef:
+                name: billing-secret
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { cpu: 250m, memory: 256Mi }
