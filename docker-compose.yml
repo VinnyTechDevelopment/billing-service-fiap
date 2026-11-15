@@ -1,0 +1,71 @@
+# Ambiente local isolado do billing-service (API + worker + MySQL próprio +
+# LocalStack/SQS + Swagger). Para os 3 microsserviços juntos, use o
+# docker-compose.microservices.yml do os-service (tech-challenge-fiap).
+x-env: &env
+  APP_NAME: billing-service
+  APP_ENV: local
+  APP_DEBUG: "true"
+  APP_KEY: base64:Wm9vcGVyLWRldi1rZXktYmlsbGluZy1zZXJ2aWNlLTA=
+  LOG_CHANNEL: stderr
+  DB_CONNECTION: mysql
+  DB_HOST: db
+  DB_DATABASE: billing
+  DB_USERNAME: billing
+  DB_PASSWORD: billing
+  CACHE_STORE: file
+  SESSION_DRIVER: array
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_ENDPOINT_URL: http://localstack:4566
+  MESSAGING_DRIVER: sqs
+  MESSAGING_QUEUE_PREFIX: local
+  BILLING_PUBLIC_URL: http://localhost:8084
+  PAYMENT_GATEWAY: ${PAYMENT_GATEWAY:-fake}
+  MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
+  MERCADOPAGO_WEBHOOK_SECRET: ${MERCADOPAGO_WEBHOOK_SECRET:-}
+  JWT_SECRET: dev-staff-jwt-secret-troque-em-producao-0123456789abcdef
+
+services:
+  app:
+    build: .
+    image: local/billing-service
+    ports: ["8084:8000"]
+    environment: *env
+    command: ["sh", "-c", "php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000"]
+    depends_on:
+      db: { condition: service_healthy }
+      localstack: { condition: service_healthy }
+
+  worker:
+    image: local/billing-service
+    restart: on-failure
+    environment: *env
+    command: ["php", "artisan", "messaging:consume"]
+    depends_on: [app]
+
+  outbox:
+    image: local/billing-service
+    restart: on-failure
+    environment: *env
+    command: ["php", "artisan", "outbox:relay"]
+    depends_on: [app]
+
+  db:
+    image: mysql:8.0
+    environment: { MYSQL_ROOT_PASSWORD: root, MYSQL_DATABASE: billing, MYSQL_USER: billing, MYSQL_PASSWORD: billing }
+    healthcheck: { test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"], interval: 5s, retries: 30 }
+
+  localstack:
+    image: localstack/localstack:3.8
+    environment: { SERVICES: sqs }
+    volumes:
+      - ./docker/localstack-init.sh:/etc/localstack/init/ready.d/init.sh:ro
+    healthcheck:
+      test: ["CMD", "sh", "-c", "awslocal sqs get-queue-url --queue-name local-billing-commands"]
+      interval: 5s
+      retries: 30
+
+  swagger-ui:
+    image: swaggerapi/swagger-ui
+    ports: ["8086:8080"]
+    environment: { SWAGGER_JSON: /app/openapi.yaml }
+    volumes: ["./openapi.yaml:/app/openapi.yaml:ro"]
