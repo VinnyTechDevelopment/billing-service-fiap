@@ -42,7 +42,10 @@ resource "kubernetes_config_map_v1" "config" {
     AWS_DEFAULT_REGION     = var.aws_region
     BILLING_PUBLIC_URL     = var.public_url
     PAYMENT_GATEWAY        = var.payment_gateway
-    MERCADOPAGO_SANDBOX    = "true"
+    # Credenciais de usuário de teste (APP_USR- de conta TESTUSER) usam o
+    # init_point normal; o sandbox_init_point só serve para tokens TEST- e
+    # com APP_USR mostra "Ops, ocorreu um erro".
+    MERCADOPAGO_SANDBOX    = "false"
     NEWRELIC_APPNAME       = "billing-service"
   }
 }
