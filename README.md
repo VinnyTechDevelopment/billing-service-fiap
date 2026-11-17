@@ -68,7 +68,9 @@ Contrato completo em [`openapi.yaml`](openapi.yaml).
 3. Configure os secrets `MERCADOPAGO_ACCESS_TOKEN` e `MERCADOPAGO_WEBHOOK_SECRET` (organização GitHub).
 4. Com credenciais de usuário de teste o link é o `init_point` normal (`MERCADOPAGO_SANDBOX=false`, padrão no EKS). Pague numa janela anônima, logado com o **comprador de teste**, usando os [cartões de teste](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro/additional-content/your-integrations/test/cards) (titular `APRO` = aprovado, `OTHE` = recusado). `MERCADOPAGO_SANDBOX=true` (`sandbox_init_point`) só funciona com tokens antigos `TEST-`.
 
-Para demonstração sem o Mercado Pago use `PAYMENT_GATEWAY=fake`: o `payment_url` aponta para `POST /api/billing/payments/{id}/simulate` (`{"status": "approved" | "rejected"}`).
+**No EKS o padrão é `PAYMENT_GATEWAY=fake`** (o sandbox recusou os pagamentos de teste com "Unauthorized use of live credentials"). Para usar o Mercado Pago real, crie a variável de repositório `PAYMENT_GATEWAY=mercadopago` (Settings → Secrets and variables → Actions → Variables) e rode o deploy de novo.
+
+Com `PAYMENT_GATEWAY=fake`: o `payment_url` aponta para `POST /api/billing/payments/{id}/simulate` (`{"status": "approved" | "rejected"}`).
 
 ## Executando
 

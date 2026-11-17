@@ -49,6 +49,9 @@ jobs:
       TF_VAR_db_password: ${{ secrets.BILLING_DB_PASSWORD }}
       TF_VAR_public_url: ${{ secrets.PUBLIC_API_URL }}
       TF_VAR_mercadopago_access_token: ${{ secrets.MERCADOPAGO_ACCESS_TOKEN }}
+      # fake (simulador, padrão) | mercadopago. Trocar pela variável PAYMENT_GATEWAY
+      # do repositório (Settings → Variables), sem mudar código.
+      TF_VAR_payment_gateway: ${{ vars.PAYMENT_GATEWAY || 'fake' }}
       TF_VAR_mercadopago_webhook_secret: ${{ secrets.MERCADOPAGO_WEBHOOK_SECRET }}
     steps:
       - uses: actions/checkout@v4
