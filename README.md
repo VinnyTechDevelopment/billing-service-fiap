@@ -103,3 +103,4 @@ O CI ([`laravel-ci.yml`](.github/workflows/laravel-ci.yml)) roda Pint → PHPUni
 
 - Manifestos de referência: [`k8s/`](k8s) (validados no CI).
 - Deploy real: [`infra/kubernetes.tf`](infra/kubernetes.tf). Os workers usam `args` (e não `command`) para preservar o ENTRYPOINT que injeta a License Key do New Relic.
+<!-- demo de deploy automatizado: 16/11/2026 23:46 -->
